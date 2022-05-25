@@ -30,6 +30,8 @@
 package org.adempiere.process;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
+import java.util.Properties;
 import java.util.logging.Level;
 
 import org.adempiere.exceptions.AdempiereException;
@@ -46,6 +48,7 @@ import org.compiere.util.EMail;
 import org.compiere.util.Env;
 import org.compiere.util.KeyNamePair;
 import org.compiere.util.Msg;
+import org.compiere.util.Trx;
 import org.compiere.util.Util;
 
 /**
@@ -88,6 +91,7 @@ public class InitialClientSetup extends SvrProcess
 	private boolean p_InactivateDefaults = false;
 	private String p_AdminUserEmail = null;
 	private String p_NormalUserEmail = null;
+	private String p_Classname = null;
 
 	/** WindowNo for this process */
 	public static final int     WINDOW_THIS_PROCESS = 9999;
@@ -161,6 +165,8 @@ public class InitialClientSetup extends SvrProcess
 				p_AdminUserEmail = (String) para[i].getParameter();
 			else if (name.equals("NormalUserEmail"))
 				p_NormalUserEmail = (String) para[i].getParameter();
+			else if (name.equals("Classname"))
+				p_Classname = (String) para[i].getParameter();
 			else
 				log.log(Level.SEVERE, "Unknown Parameter: " + name);
 		}
@@ -263,39 +269,39 @@ public class InitialClientSetup extends SvrProcess
 			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "CoaFile") +  " " + p_CoAFile + " " + Msg.getMsg(Env.getCtx(), "is empty"));
 
 		// Process
-		MSetup ms = new MSetup(Env.getCtx(), WINDOW_THIS_PROCESS, isDryRun);
+		MSetup ms = null;
+		Class<?> setupClass = null;
+		Trx m_trx = Trx.get(get_TrxName(), false);
+		if(p_Classname != null 
+				&& p_Classname.length() > 0) {
+			setupClass = Class.forName(p_Classname);
+			Constructor<?> construct = setupClass.getDeclaredConstructor(new Class[] {Properties.class, int.class,Trx.class});
+			ms = (MSetup) construct.newInstance(new Object[] {getCtx(), WINDOW_THIS_PROCESS, m_trx});
+		}
+		
+		if(ms == null)
+			ms = new MSetup(getCtx(), WINDOW_THIS_PROCESS, m_trx);
+		
 		try {
-			if (! ms.createClient(p_ClientName, p_OrgValue, p_OrgName, p_AdminUserName, p_NormalUserName
-					, p_Phone, p_Phone2, p_Fax, p_EMail, p_TaxID, p_AdminUserEmail, p_NormalUserEmail, p_IsSetInitialPassword)) {
-				ms.rollback();
-				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "Create client failed"));
-			}
+			ms.createClient(p_ClientName, p_OrgValue, p_OrgName, p_AdminUserName, p_NormalUserName ,
+					p_Phone, p_Phone2, p_Fax, p_EMail, p_TaxID, p_AdminUserEmail, p_NormalUserEmail, p_IsSetInitialPassword);
 				
 			addLog(ms.getInfo());
 
 			//  Generate Accounting
 			MCurrency currency = MCurrency.get(getCtx(), p_C_Currency_ID);
 			KeyNamePair currency_kp = new KeyNamePair(p_C_Currency_ID, currency.getDescription());
-			if (!ms.createAccounting(currency_kp,
-				p_IsUseProductDimension, p_IsUseBPDimension, p_IsUseProjectDimension, p_IsUseCampaignDimension, p_IsUseSalesRegionDimension, p_IsUseActivityDimension,
-				coaFile, p_UseDefaultCoA, p_InactivateDefaults)) {
-				ms.rollback();
-				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "AccountSetupError"));
-			}
+			ms.createAccounting(currency_kp,
+					p_IsUseProductDimension, p_IsUseBPDimension, p_IsUseProjectDimension, p_IsUseCampaignDimension, p_IsUseSalesRegionDimension, p_IsUseActivityDimension,
+					coaFile, p_UseDefaultCoA, p_InactivateDefaults);
 
 			//  Generate Entities
-			if (!ms.createEntities(p_C_Country_ID, p_CityName, p_C_Region_ID, p_C_Currency_ID, p_Postal, p_Address1)) {
-				ms.rollback();
-				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "AccountSetupError"));
-			}
+			ms.createEntities(p_C_Country_ID, p_CityName, p_C_Region_ID, p_C_Currency_ID, p_Postal, p_Address1);
 			addLog(ms.getInfo());
 
 			//	Create Print Documents
-			PrintUtil.setupPrintForm(ms.getAD_Client_ID(), isDryRun ? ms.getTrxName() : null);
-			if (isDryRun)
-				ms.rollback();
+			PrintUtil.setupPrintForm(ms.getAD_Client_ID(), isDryRun ? null : ms.getTrxName());
 		} catch (Exception e) {
-			ms.rollback();
 			throw e;
 		}
 
