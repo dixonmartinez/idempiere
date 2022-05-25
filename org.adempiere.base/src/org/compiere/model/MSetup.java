@@ -108,7 +108,7 @@ public class MSetup {
 	 * @param isSetInitialPassword
 	 * @return true if created
 	 */
-	public void createClient(String clientName, String orgValue, String orgName, String userClient, String userOrg,
+	public final void createClient(String clientName, String orgValue, String orgName, String userClient, String userOrg,
 			String phone, String phone2, String fax, String eMail, String taxID, String adminEmail, String userEmail,
 			boolean isSetInitialPassword) throws Exception {
 		log.info(clientName);
@@ -158,16 +158,12 @@ public class MSetup {
 			name = "newOrg";
 		if (orgValue == null || orgValue.length() == 0)
 			orgValue = name;
-		m_org = new MOrg(m_client, orgValue, name);
-		m_org.saveEx();
-
-		Env.setContext(m_ctx, m_WindowNo, "AD_Org_ID", getAD_Org_ID());
-		Env.setContext(m_ctx, Env.AD_ORG_ID, getAD_Org_ID());
+		m_org = addOrganization(m_client, orgValue, name);
 		// Info
 		m_info.append(Msg.translate(m_lang, "AD_Org_ID")).append("=").append(name).append("\n");
 
 		// Set Organization Phone, Phone2, Fax, EMail
-		MOrgInfo orgInfo = MOrgInfo.getCopy(m_ctx, getAD_Org_ID(), getTrxName());
+		MOrgInfo orgInfo = addOrgInfo(getAD_Org_ID(),getTrxName());
 		orgInfo.setPhone(phone);
 		orgInfo.setPhone2(phone2);
 		orgInfo.setFax(fax);
@@ -176,12 +172,15 @@ public class MSetup {
 			orgInfo.setTaxID(taxID);
 		}
 		orgInfo.saveEx();
+		
+		Env.setContext(m_ctx, m_WindowNo, "AD_Org_ID", getAD_Org_ID());
+		Env.setContext(m_ctx, Env.AD_ORG_ID, getAD_Org_ID());
 
 		/**
 		 * Create Roles - Admin - User
 		 */
 		name = m_clientName + " Admin";
-		MRole adminRole = createRole(name, true, MRole.USERLEVEL_ClientPlusOrganization, MRole.PREFERENCETYPE_Client,
+		MRole adminRole = addRole(name, true, MRole.USERLEVEL_ClientPlusOrganization, MRole.PREFERENCETYPE_Client,
 				true, getTrxName());
 		// Info - Admin Role
 		m_info.append(Msg.translate(m_lang, "AD_Role_ID")).append("=").append(name).append("\n");
@@ -189,7 +188,7 @@ public class MSetup {
 		addOrgAccessRole(adminRole, m_org.getAD_Org_ID());
 		//
 		name = m_clientName + " User";
-		MRole userRole = createRole(name, false, MRole.USERLEVEL_Organization, MRole.PREFERENCETYPE_Client, false,
+		MRole userRole = addRole(name, false, MRole.USERLEVEL_Organization, MRole.PREFERENCETYPE_Client, false,
 				getTrxName());
 		addOrgAccessRole(userRole, m_org.getAD_Org_ID());
 
@@ -202,14 +201,14 @@ public class MSetup {
 		name = userClient;
 		if (name == null || name.length() == 0)
 			name = m_clientName + "Client";
-		adminClientUser = createUser(AD_Client_ID, name, adminEmail, isSetInitialPassword, getTrxName());
+		adminClientUser = addUser(AD_Client_ID, name, adminEmail, isSetInitialPassword, getTrxName());
 		// Info
 		m_info.append(Msg.translate(m_lang, "AD_User_ID")).append("=").append(adminClientUser.getName()).append("/")
 				.append(adminClientUser.getName()).append("\n");
 		name = userOrg;
 		if (name == null || name.length() == 0)
 			name = m_clientName + "Client";
-		clientUser = createUser(AD_Client_ID, name, userEmail, isSetInitialPassword, getTrxName());
+		clientUser = addUser(AD_Client_ID, name, userEmail, isSetInitialPassword, getTrxName());
 		// Info
 		m_info.append(Msg.translate(m_lang, "AD_User_ID")).append("=").append(clientUser.getAD_User_ID()).append("/")
 				.append(clientUser.getName()).append("\n");
@@ -227,66 +226,12 @@ public class MSetup {
 
 		log.info("fini");
 	} // createClient
-
-	protected void addProcessors(Class<?> processor, MUser adminClientUser) throws Exception {
-		if (MAcctProcessor.class.isInstance(processor)) {
-			MAcctProcessor ap = new MAcctProcessor(m_client, adminClientUser.getAD_User_ID());
-			ap.setAD_Schedule_ID(SCHEDULE_10_MINUTES);
-			ap.saveEx();
-		} else if (MRequestProcessor.class.isInstance(processor)) {
-			MRequestProcessor rp = new MRequestProcessor(m_client, adminClientUser.getAD_User_ID());
-			rp.setAD_Schedule_ID(SCHEDULE_15_MINUTES);
-			rp.saveEx();
-		}
-	}
-
-	protected void addUserRole(MUser user, MRole role, String trxName) throws Exception {
-		// ClientUser - Admin & User
-		X_AD_User_Roles userRole = new X_AD_User_Roles(m_ctx, 0, trxName);
-		userRole.setAD_Role_ID(role.getAD_Role_ID());
-		userRole.setAD_User_ID(user.getAD_User_ID());
-		userRole.saveEx();
-	}
-
-	protected MUser createUser(int p_AD_Client_ID, String name, String email, boolean isSetInitialPassword,
-			String trxName) throws Exception {
-		MUser user = new MUser(m_ctx, 0, trxName);
-		if (isSetInitialPassword)
-			user.setPassword(name);
-		user.setDescription(name);
-		user.setName(name);
-		user.setAD_Client_ID(p_AD_Client_ID);
-		user.setAD_Org_ID(0);
-		user.setEMail(email);
-		user.saveEx();
-		return user;
-	}
-
-	protected void addOrgAccessRole(MRole role, int p_AD_Org_ID) throws Exception {
-		// OrgAccess x, 0
-		MRoleOrgAccess adminClientAccess = new MRoleOrgAccess(role, p_AD_Org_ID);
-		adminClientAccess.saveEx();
-	}
-
-	protected MRole createRole(String name, boolean isAdmin, String p_UserLevel, String p_PreferenceType,
-			boolean isAccessAvanced, String trxName) throws Exception {
-		MRole role = new MRole(m_ctx, 0, trxName);
-		role.setClientOrg(m_client);
-		role.setName(name);
-		role.setUserLevel(p_UserLevel);
-		role.setPreferenceType(p_PreferenceType);
-		role.setIsShowAcct(true);
-		role.setIsAccessAdvanced(isAccessAvanced);
-		role.setIsClientAdministrator(isAdmin);
-		role.saveEx();
-		return role;
-	}
-
+	
 	// preserving backward compatibility with swing client
 	public void createAccounting(KeyNamePair currency, boolean hasProduct, boolean hasBPartner, boolean hasProject,
 			boolean hasMCampaign, boolean hasSRegion, File AccountingFile) throws Exception {
 		createAccounting(currency, hasProduct, hasBPartner, hasProject, hasMCampaign, hasSRegion, false, AccountingFile,
-				false, false);
+				false, false, true);
 	}
 
 	/**************************************************************************
@@ -308,7 +253,7 @@ public class MSetup {
 	 */
 	public void createAccounting(KeyNamePair currency, boolean hasProduct, boolean hasBPartner, boolean hasProject,
 			boolean hasMCampaign, boolean hasSRegion, boolean hasActivity, File AccountingFile, boolean useDefaultCoA,
-			boolean inactivateDefaults) throws Exception {
+			boolean inactivateDefaults, boolean withDefaultDocuments) throws Exception {
 		if (log.isLoggable(Level.INFO))
 			log.info(m_client.toString());
 		//
@@ -377,157 +322,18 @@ public class MSetup {
 		// Create Defaults Accounts
 		createAccountingRecord(X_C_AcctSchema_GL.Table_Name);
 		createAccountingRecord(X_C_AcctSchema_Default.Table_Name);
-
-		createDefaultsDocuments();
-
+		
 		// Update ClientInfo
 		String sql = "UPDATE AD_ClientInfo SET C_AcctSchema1_ID=?, C_Calendar_ID=? WHERE AD_Client_ID= ? ";
-		updateClientInfo(sql, new Object[] {m_as.getC_AcctSchema_ID(),m_calendar.getC_Calendar_ID(), m_client.getAD_Client_ID() }, getTrxName());
+		updateRecordInfo(sql, new Object[] {m_as.getC_AcctSchema_ID(),m_calendar.getC_Calendar_ID(), m_client.getAD_Client_ID() }, getTrxName());
 		
-		// Validate Completeness
-		ProcessInfo processInfo = new ProcessInfo("Document Type Verify", 0);
-		processInfo.setAD_Client_ID(getAD_Client_ID());
-		processInfo.setAD_User_ID(getAD_User_ID());
-		processInfo.setParameter(new ProcessInfoParameter[0]);
-		processInfo.setClassName("org.compiere.process.DocumentTypeVerify");
-		if (!ProcessUtil.startJavaProcess(m_ctx, processInfo, m_trx, false)) {
-			String err = "Document type verification failed. Message=" + processInfo.getSummary();
-			log.log(Level.SEVERE, err);
-			m_info.append(err);
-			throw new AdempiereException(err);
-		}
+		if(withDefaultDocuments) 
+			createDefaultsDocuments();
 		//
 		log.info("fini");
 	}
 
-	protected void createDefaultsDocuments() {
-		// GL Categories
-		createGLCategory("Standard", MGLCategory.CATEGORYTYPE_Manual, true);
-		int GL_None = createGLCategory("None", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_GL = createGLCategory("Manual", MGLCategory.CATEGORYTYPE_Manual, false);
-		int GL_ARI = createGLCategory("AR Invoice", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_ARR = createGLCategory("AR Receipt", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_MM = createGLCategory("Material Management", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_API = createGLCategory("AP Invoice", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_APP = createGLCategory("AP Payment", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_CASH = createGLCategory("Cash/Payments", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_Manufacturing = createGLCategory("Manufacturing", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_Distribution = createGLCategory("Distribution", MGLCategory.CATEGORYTYPE_Document, false);
-		int GL_Payroll = createGLCategory("Payroll", MGLCategory.CATEGORYTYPE_Document, false);
-
-		// Base DocumentTypes
-		int ii = createDocType("GL Journal", Msg.getElement(m_ctx, "GL_Journal_ID"), MDocType.DOCBASETYPE_GLJournal,
-				null, 0, 0, 1000, GL_GL, false);
-		if (ii == 0) {
-			String err = "Document Type not created";
-			m_info.append(err);
-			throw new AdempiereException(err);
-		}
-		createDocType("GL Journal Batch", Msg.getElement(m_ctx, "GL_JournalBatch_ID"), MDocType.DOCBASETYPE_GLJournal,
-				null, 0, 0, 100, GL_GL, false);
-		// MDocType.DOCBASETYPE_GLDocument
-		//
-		int DT_I = createDocType("AR Invoice", Msg.getElement(m_ctx, "C_Invoice_ID", true),
-				MDocType.DOCBASETYPE_ARInvoice, null, 0, 0, 100000, GL_ARI, false);
-		int DT_II = createDocType("AR Invoice Indirect", Msg.getElement(m_ctx, "C_Invoice_ID", true),
-				MDocType.DOCBASETYPE_ARInvoice, null, 0, 0, 150000, GL_ARI, false);
-		int DT_IC = createDocType("AR Credit Memo", Msg.getMsg(m_ctx, "CreditMemo"), MDocType.DOCBASETYPE_ARCreditMemo,
-				null, 0, 0, 170000, GL_ARI, false);
-		// MDocType.DOCBASETYPE_ARProFormaInvoice
-
-		createDocType("AP Invoice", Msg.getElement(m_ctx, "C_Invoice_ID", false), MDocType.DOCBASETYPE_APInvoice, null,
-				0, 0, 0, GL_API, false);
-		int DT_IPC = createDocType("AP CreditMemo", Msg.getMsg(m_ctx, "CreditMemo"), MDocType.DOCBASETYPE_APCreditMemo,
-				null, 0, 0, 0, GL_API, false);
-		createDocType("Match Invoice", Msg.getElement(m_ctx, "M_MatchInv_ID", false), MDocType.DOCBASETYPE_MatchInvoice,
-				null, 0, 0, 390000, GL_API, false);
-
-		createDocType("AR Receipt", Msg.getElement(m_ctx, "C_Payment_ID", true), MDocType.DOCBASETYPE_ARReceipt, null,
-				0, 0, 0, GL_ARR, false);
-		createDocType("AP Payment", Msg.getElement(m_ctx, "C_Payment_ID", false), MDocType.DOCBASETYPE_APPayment, null,
-				0, 0, 0, GL_APP, false);
-		createDocType("Allocation", "Allocation", MDocType.DOCBASETYPE_PaymentAllocation, null, 0, 0, 490000, GL_CASH,
-				false);
-
-		int DT_S = createDocType("MM Shipment", "Delivery Note", MDocType.DOCBASETYPE_MaterialDelivery, null, 0, 0,
-				500000, GL_MM, false);
-		int DT_SI = createDocType("MM Shipment Indirect", "Delivery Note", MDocType.DOCBASETYPE_MaterialDelivery, null,
-				0, 0, 550000, GL_MM, false);
-		int DT_VRM = createDocType("MM Vendor Return", "Vendor Return", MDocType.DOCBASETYPE_MaterialDelivery, null, 0,
-				0, 590000, GL_MM, true);
-
-		createDocType("MM Receipt", "Vendor Delivery", MDocType.DOCBASETYPE_MaterialReceipt, null, 0, 0, 0, GL_MM,
-				false);
-		int DT_RM = createDocType("MM Customer Return", "Customer Return", MDocType.DOCBASETYPE_MaterialReceipt, null,
-				0, 0, 570000, GL_MM, true);
-
-		createDocType("Purchase Order", Msg.getElement(m_ctx, "C_Order_ID", false), MDocType.DOCBASETYPE_PurchaseOrder,
-				null, 0, 0, 800000, GL_None, false);
-		createDocType("Match PO", Msg.getElement(m_ctx, "M_MatchPO_ID", false), MDocType.DOCBASETYPE_MatchPO, null, 0,
-				0, 890000, GL_None, false);
-		createDocType("Purchase Requisition", Msg.getElement(m_ctx, "M_Requisition_ID", false),
-				MDocType.DOCBASETYPE_PurchaseRequisition, null, 0, 0, 900000, GL_None, false);
-		createDocType("Vendor Return Material", "Vendor Return Material Authorization",
-				MDocType.DOCBASETYPE_PurchaseOrder, MDocType.DOCSUBTYPESO_ReturnMaterial, DT_VRM, DT_IPC, 990000, GL_MM,
-				false);
-
-		createDocType("Bank Statement", Msg.getElement(m_ctx, "C_BankStatemet_ID", true),
-				MDocType.DOCBASETYPE_BankStatement, null, 0, 0, 700000, GL_CASH, false);
-		createDocType("Cash Journal", Msg.getElement(m_ctx, "C_Cash_ID", true), MDocType.DOCBASETYPE_CashJournal, null,
-				0, 0, 750000, GL_CASH, false);
-
-		createDocType("Material Movement", Msg.getElement(m_ctx, "M_Movement_ID", false),
-				MDocType.DOCBASETYPE_MaterialMovement, null, 0, 0, 610000, GL_MM, false);
-		createDocType("Physical Inventory", Msg.getElement(m_ctx, "M_Inventory_ID", false),
-				MDocType.DOCBASETYPE_MaterialPhysicalInventory, MDocType.DOCSUBTYPEINV_PhysicalInventory, 0, 0, 620000,
-				GL_MM, false);
-		createDocType("Material Production", Msg.getElement(m_ctx, "M_Production_ID", false),
-				MDocType.DOCBASETYPE_MaterialProduction, null, 0, 0, 630000, GL_MM, false);
-		createDocType("Project Issue", Msg.getElement(m_ctx, "C_ProjectIssue_ID", false),
-				MDocType.DOCBASETYPE_ProjectIssue, null, 0, 0, 640000, GL_MM, false);
-		createDocType("Internal Use Inventory", "Internal Use Inventory",
-				MDocType.DOCBASETYPE_MaterialPhysicalInventory, MDocType.DOCSUBTYPEINV_InternalUseInventory, 0, 0,
-				650000, GL_MM, false);
-		createDocType("Cost Adjustment", "Cost Adjustment", MDocType.DOCBASETYPE_MaterialPhysicalInventory,
-				MDocType.DOCSUBTYPEINV_CostAdjustment, 0, 0, 660000, GL_MM, false);
-
-		// Order Entry
-		createDocType("Binding offer", "Quotation", MDocType.DOCBASETYPE_SalesOrder, MDocType.DOCSUBTYPESO_Quotation, 0,
-				0, 10000, GL_None, false);
-		createDocType("Non binding offer", "Proposal", MDocType.DOCBASETYPE_SalesOrder, MDocType.DOCSUBTYPESO_Proposal,
-				0, 0, 20000, GL_None, false);
-		createDocType("Prepay Order", "Prepay Order", MDocType.DOCBASETYPE_SalesOrder,
-				MDocType.DOCSUBTYPESO_PrepayOrder, DT_S, DT_I, 30000, GL_None, false);
-		createDocType("Customer Return Material", "Customer Return Material Authorization",
-				MDocType.DOCBASETYPE_SalesOrder, MDocType.DOCSUBTYPESO_ReturnMaterial, DT_RM, DT_IC, 30000, GL_None,
-				false);
-		createDocType("Standard Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
-				MDocType.DOCSUBTYPESO_StandardOrder, DT_S, DT_I, 50000, GL_None, false);
-		createDocType("Credit Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
-				MDocType.DOCSUBTYPESO_OnCreditOrder, DT_SI, DT_I, 60000, GL_None, false); // RE
-		createDocType("Warehouse Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
-				MDocType.DOCSUBTYPESO_WarehouseOrder, DT_S, DT_I, 70000, GL_None, false); // LS
-
-		// Manufacturing Document
-		createDocType("Manufacturing Order", "Manufacturing Order", MDocType.DOCBASETYPE_ManufacturingOrder, null, 0, 0,
-				80000, GL_Manufacturing, false);
-		createDocType("Manufacturing Cost Collector", "Cost Collector", MDocType.DOCBASETYPE_ManufacturingCostCollector,
-				null, 0, 0, 81000, GL_Manufacturing, false);
-		createDocType("Maintenance Order", "Maintenance Order", MDocType.DOCBASETYPE_MaintenanceOrder, null, 0, 0,
-				86000, GL_Manufacturing, false);
-		createDocType("Quality Order", "Quality Order", MDocType.DOCBASETYPE_QualityOrder, null, 0, 0, 87000,
-				GL_Manufacturing, false);
-		createDocType("Distribution Order", "Distribution Order", MDocType.DOCBASETYPE_DistributionOrder, null, 0, 0,
-				88000, GL_Distribution, false);
-		// Payroll
-		createDocType("Payroll", "Payroll", MDocType.DOCBASETYPE_Payroll, null, 0, 0, 90000, GL_Payroll, false);
-
-		int DT = createDocType("POS Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
-				MDocType.DOCSUBTYPESO_POSOrder, DT_SI, DT_II, 80000, GL_None, false); // Bar
-		// POS As Default for window SO
-		createPreference("C_DocTypeTarget_ID", String.valueOf(DT), 143, getTrxName());
-
-	}
+	
 
 	private void createClientAccounting(String name, int C_Element_ID, boolean hasProduct, boolean hasBPartner,
 			boolean hasProject, boolean hasMCampaign, boolean hasSRegion, boolean hasActivity) throws Exception {
@@ -635,7 +441,6 @@ public class MSetup {
 	}
 
 	// createAccounting
-
 	protected void createAccountingRecord(String tableName) throws Exception {
 		MTable table = MTable.get(m_ctx, tableName);
 		PO acct = table.getPO(0, getTrxName());
@@ -797,7 +602,9 @@ public class MSetup {
 		int no = 0;
 
 		// Create Marketing Channel/Campaign
-		addChannelCampaign(defaultName, m_hasMCampaign, getTrxName());
+		X_C_Channel channel = addChannel(defaultName, m_hasMCampaign, getTrxName());
+		
+		addCampaign(channel, defaultName, m_hasMCampaign, getTrxName());
 
 		// Create Sales Region
 		addSalesRegion(defaultName, m_hasSRegion, getTrxName());
@@ -848,7 +655,7 @@ public class MSetup {
 
 		// Update ClientInfo
 		String sql = "UPDATE AD_ClientInfo SET C_BPartnerCashTrx_ID=?,M_ProductFreight_ID= ? WHERE AD_Client_ID= ? ";
-		updateClientInfo(sql,new Object[] { defaultPartner.getC_BPartner_ID(), defaultProduct.getM_Product_ID(), getAD_Client_ID() },
+		updateRecordInfo(sql,new Object[] { defaultPartner.getC_BPartner_ID(), defaultProduct.getM_Product_ID(), getAD_Client_ID() },
 				getTrxName());
 		// PriceList
 		MPriceList defaultPriceList = addPriceList(0, defaultName, C_Currency_ID, true, getTrxName());
@@ -924,300 +731,6 @@ public class MSetup {
 		return true;
 	} // createEntities
 
-	protected void addProject(String defaultName, int p_Currency_ID, boolean hasProject, boolean isSummary,
-			String trxName) {
-		MProject project = new MProject(m_ctx, 0, trxName);
-		project.setC_Currency_ID(p_Currency_ID);
-		project.setValue(defaultName);
-		project.setName(defaultName);
-		if (project.save()) {
-			if (hasProject) {
-				String sql = "UPDATE C_AcctSchema_Element SET C_Project_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='PJ'";
-				DB.executeUpdateEx(sql, new Object[] { project.getC_Project_ID(), m_as.getC_AcctSchema_ID() }, trxName);
-			}
-		}
-	}
-
-	protected void addCycle(String defaultName, int p_Currency_ID, String trxName) {
-		X_C_Cycle cycle = new X_C_Cycle(m_ctx, 0, trxName);
-		cycle.setC_Currency_ID(p_Currency_ID);
-		cycle.setName(defaultName);
-		cycle.saveEx();
-	}
-
-	protected void addPaymentTerm(String paymentTermName, int p_NetDays, int p_GraceDays, int p_DiscountDays,
-			BigDecimal p_Discount, int p_DiscountDays2, BigDecimal p_Discount2, boolean p_IsDefault, String trxName) {
-
-		MPaymentTerm paymentTerm = new MPaymentTerm(m_ctx, 0, trxName);
-		paymentTerm.setName(paymentTermName);
-		paymentTerm.setNetDays(p_NetDays);
-		paymentTerm.setGraceDays(p_GraceDays);
-		paymentTerm.setDiscountDays(p_DiscountDays);
-		paymentTerm.setDiscount(p_Discount);
-		paymentTerm.setDiscountDays2(p_DiscountDays2);
-		paymentTerm.setDiscount2(p_Discount2);
-		paymentTerm.setIsDefault(p_IsDefault);
-		paymentTerm.saveEx();
-	}
-
-	protected MProductPrice addProductPrice(MPriceListVersion defaultPLV, int p_Product_ID, BigDecimal p_PriceList,
-			BigDecimal p_PriceStd, BigDecimal p_PriceLimit, String trxName) {
-		MProductPrice pp = new MProductPrice(m_ctx, defaultPLV.getM_PriceList_Version_ID(), p_Product_ID, trxName);
-		if (p_PriceList != null)
-			pp.setPriceList(p_PriceList);
-		if (p_PriceStd != null)
-			pp.setPriceStd(p_PriceStd);
-		if (p_PriceLimit != null)
-			pp.setPriceLimit(p_PriceLimit);
-
-		if (pp.save()) {
-			m_info.append(Msg.translate(m_lang, "M_ProductPrice_ID")).append(" inserted").append("\n");
-			return pp;
-		}
-		log.log(Level.SEVERE, "ProductPrice NOT inserted");
-		return null;
-	}
-
-	protected MPriceListVersion addPriceListVersion(MPriceList defaultPriceList, MDiscountSchema p_DiscountSchema,
-			int p_AD_Org_ID) {
-		MPriceListVersion plv = new MPriceListVersion(defaultPriceList);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		plv.setAD_Org_ID(orgID);
-		plv.setName();
-		plv.setM_DiscountSchema_ID(p_DiscountSchema.getM_DiscountSchema_ID());
-		if (plv.save()) {
-			m_info.append(Msg.translate(m_lang, "M_PriceListVersion_ID")).append("=").append(plv.getName())
-					.append("\n");
-			return plv;
-		}
-		log.log(Level.SEVERE, "PriceList_Version NOT inserted");
-
-		return null;
-	}
-
-	protected MDiscountSchema addDiscountSchema(int p_AD_Org_ID, String defaultName, String p_DiscountType,
-			String trxName) {
-		MDiscountSchema ds = new MDiscountSchema(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		ds.setAD_Org_ID(orgID);
-		ds.setName(defaultName);
-		ds.setDiscountType(p_DiscountType);
-		if (ds.save()) {
-			m_info.append(Msg.translate(m_lang, "M_DiscountSchema_ID")).append("=").append(defaultName).append("\n");
-			return ds;
-		}
-		log.log(Level.SEVERE, "DiscountSchema NOT inserted");
-		return null;
-	}
-
-	protected MPriceList addPriceList(int p_AD_Org_ID, String defaultName, int p_Currency_ID, boolean isDefault,
-			String trxName) {
-		MPriceList pl = new MPriceList(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		pl.setAD_Org_ID(orgID);
-		pl.setName(defaultName);
-		pl.setC_Currency_ID(p_Currency_ID);
-		pl.setIsDefault(isDefault);
-		if (pl.save()) {
-			m_info.append(Msg.translate(m_lang, "M_PriceList_ID")).append("=").append(defaultName).append("\n");
-			return pl;
-		}
-		log.log(Level.SEVERE, "PriceList NOT inserted");
-		return null;
-	}
-
-	protected boolean updateClientInfo(String sql, Object[] parameters, String trxName) throws Exception{
-		return DB.executeUpdateEx(sql, parameters, trxName) != 1;
-	}
-
-	protected MLocator addWarehouseLocator(MWarehouse p_Warehouse, String p_Name, boolean isDefault, String trxName) {
-		MLocator locator = new MLocator(p_Warehouse, p_Name);
-		locator.setIsDefault(isDefault);
-		if (locator.save()) {
-			m_info.append(Msg.translate(m_lang, "M_Locator_ID")).append("=").append(p_Name).append("\n");
-			return locator;
-		}
-		log.log(Level.SEVERE, "Locator NOT inserted");
-		return null;
-	}
-
-	protected MWarehouse addWarehouse(MLocation warehouseLocation, int p_AD_Org_ID, String defaultName,
-			String trxName) {
-		MWarehouse wh = new MWarehouse(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		wh.setAD_Org_ID(orgID);
-		wh.setValue(defaultName);
-		wh.setName(defaultName);
-		wh.setC_Location_ID(warehouseLocation.getC_Location_ID());
-		if (wh.save()) {
-			m_info.append(Msg.translate(m_lang, "M_Warehouse_ID")).append("=").append(defaultName).append("\n");
-			return wh;
-		}
-		log.log(Level.SEVERE, "Warehouse NOT inserted");
-
-		return null;
-	}
-
-	protected MProduct addProduct(MProductCategory productCategory, MTaxCategory taxCategory, int p_UOM_ID,
-			String defaultName, int p_AD_Org_ID, boolean isHasProduct, String trxName) {
-		MProduct product = new MProduct(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		product.setAD_Org_ID(orgID);
-		product.setValue(defaultName);
-		product.setName(defaultName);
-		product.setC_UOM_ID(p_UOM_ID);
-		product.setM_Product_Category_ID(productCategory.getM_Product_Category_ID());
-		product.setC_TaxCategory_ID(taxCategory.getC_TaxCategory_ID());
-		if (product.save()) {
-			m_info.append(Msg.translate(m_lang, "M_Product_ID")).append("=").append(defaultName).append("\n");
-			if (isHasProduct) {
-				String sql = "UPDATE C_AcctSchema_Element SET M_Product_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='PR'";
-				DB.executeUpdateEx(sql, new Object[] { product.getM_Product_ID(), m_as.getC_AcctSchema_ID() }, trxName);
-			}
-			return product;
-		}
-		log.log(Level.SEVERE, "Product NOT inserted");
-		return null;
-	}
-
-	protected MTax addTax(MTaxCategory p_TaxCategory, String defaultName, int p_AD_Org_ID, boolean isDefault,
-			String trxName) {
-		MTax tax = new MTax(m_ctx, defaultName, Env.ZERO, p_TaxCategory.getC_TaxCategory_ID(), trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		tax.setAD_Org_ID(orgID);
-		tax.setIsDefault(isDefault);
-		if (tax.save()) {
-			m_info.append(Msg.translate(m_lang, "C_Tax_ID")).append("=").append(tax.getName()).append("\n");
-			return tax;
-		}
-		log.log(Level.SEVERE, "Tax NOT inserted");
-		return null;
-	}
-
-	protected MTaxCategory addTaxCategory(String taxName, int p_AD_Org_ID, boolean isDefault, String trxName) {
-
-		MTaxCategory taxCategory = new MTaxCategory(m_ctx, 0, trxName);
-		taxCategory.setName(taxName);
-		taxCategory.setIsDefault(isDefault);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		taxCategory.setAD_Org_ID(orgID);
-
-		if (taxCategory.save()) {
-			m_info.append(Msg.translate(m_lang, "C_TaxCategory_ID")).append("=").append(taxName).append("\n");
-			return taxCategory;
-		}
-		log.log(Level.SEVERE, "TaxCategory NOT inserted");
-		return null;
-	}
-
-	protected MProductCategory addProductCategory(int p_AD_Org_ID, String defaultName, boolean b, String trxName) {
-		MProductCategory pc = new MProductCategory(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		pc.setAD_Org_ID(orgID);
-		pc.setValue(defaultName);
-		pc.setName(defaultName);
-		pc.setIsDefault(true);
-		if (pc.save()) {
-			m_info.append(Msg.translate(m_lang, "M_Product_Category_ID")).append("=").append(defaultName).append("\n");
-			return pc;
-		}
-		log.log(Level.SEVERE, "Product Category NOT inserted");
-		return null;
-	}
-
-	protected MLocation addLocation(int p_AD_Org_ID, int p_Country_ID, int p_Region_ID, String p_City,
-			boolean isByCompany, String trxName) throws Exception {
-		MLocation loc = new MLocation(m_ctx, p_Country_ID, p_Region_ID, p_City, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		loc.setAD_Org_ID(orgID);
-		loc.saveEx();
-		if (isByCompany) {
-			String sql = "UPDATE AD_OrgInfo SET C_Location_ID= ? WHERE AD_Org_ID= ? ";
-			DB.executeUpdateEx(sql, new Object[] { loc.getC_Location_ID(), getAD_Org_ID() }, trxName);
-		}
-		return loc;
-	}
-
-	protected MBPartnerLocation addPartnerLocation(MBPartner p_Partner, MLocation p_Location, int p_AD_Org_ID,
-			String trxName) throws Exception {
-		MBPartnerLocation bpl = new MBPartnerLocation(p_Partner);
-		bpl.setC_Location_ID(p_Location.getC_Location_ID());
-		bpl.saveEx();
-		return bpl;
-	}
-
-	protected MBPartner addBPartner(MBPGroup bpGroup, String defaultName, int p_AD_Org_ID, boolean isHasPartner,
-			String trxName) throws Exception {
-		MBPartner bp = new MBPartner(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		bp.setAD_Org_ID(orgID);
-		bp.setValue(defaultName);
-		bp.setName(defaultName);
-		bp.setBPGroup(bpGroup);
-		bp.saveEx();
-		m_info.append(Msg.translate(m_lang, "C_BPartner_ID")).append("=").append(defaultName).append("\n");
-		if (isHasPartner) {
-			String sql = "UPDATE C_AcctSchema_Element SET C_BPartner_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='BP'";
-			DB.executeUpdateEx(sql, new Object[] { bp.getC_BPartner_ID(), m_as.getC_AcctSchema_ID() }, trxName);
-		}
-		return bp;
-	}
-
-	protected MBPGroup addBPGroup(String defaultName, int p_AD_Org_ID, boolean isDefault, String trxName) {
-		MBPGroup bpGroup = new MBPGroup(m_ctx, 0, trxName);
-		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
-		bpGroup.setAD_Org_ID(orgID);
-		bpGroup.setValue(defaultName);
-		bpGroup.setName(defaultName);
-		bpGroup.setIsDefault(isDefault);
-
-		if (bpGroup.save()) {
-			m_info.append(Msg.translate(m_lang, "C_BP_Group_ID")).append("=").append(defaultName).append("\n");
-			return bpGroup;
-		}
-		log.log(Level.SEVERE, Msg.translate(m_lang, "C_BP_Group_ID") + " NOT inserted");
-		return null;
-	}
-
-	protected void addActivity(String defaultName, boolean isHasActivity, String trxName) {
-		X_C_Activity activity = new X_C_Activity(m_ctx, 0, trxName);
-		activity.setName(defaultName);
-		activity.saveEx();
-
-		if (isHasActivity) {
-			String sql = "UPDATE C_AcctSchema_Element SET C_Activity_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='SR'";
-			DB.executeUpdateEx(sql, new Object[] { activity.getC_Activity_ID(), m_as.getC_AcctSchema_ID() }, trxName);
-		}
-	}
-
-	protected void addSalesRegion(String defaultName, boolean isHasRegion, String trxName) {
-		X_C_SalesRegion salesRegion = new X_C_SalesRegion(m_ctx, 0, trxName);
-		salesRegion.setName(defaultName);
-		salesRegion.saveEx();
-
-		if (isHasRegion) {
-			String sql = "UPDATE C_AcctSchema_Element SET C_SalesRegion_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='SR'";
-			DB.executeUpdateEx(sql, new Object[] { salesRegion.getC_SalesRegion_ID(), m_as.getC_AcctSchema_ID() },
-					trxName);
-		}
-	}
-
-	protected void addChannelCampaign(String name, boolean isHasCampign, String trxName) {
-		X_C_Channel channel = new X_C_Channel(m_ctx, 0, trxName);
-		channel.setName(name);
-		channel.saveEx();
-
-		X_C_Campaign campaing = new X_C_Campaign(m_ctx, 0, trxName);
-		campaing.setName(name);
-		campaing.setC_Channel_ID(channel.getC_Channel_ID());
-		campaing.saveEx();
-
-		if (isHasCampign) {
-			String sql = "UPDATE C_AcctSchema_Element SET C_Campaign_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='MC'";
-			DB.executeUpdateEx(sql, new Object[] { campaing.getC_Campaign_ID(), m_as.getC_AcctSchema_ID() }, trxName);
-		}
-	}
-
 	/**
 	 * Create Preference
 	 * 
@@ -1225,7 +738,7 @@ public class MSetup {
 	 * @param Value        value
 	 * @param AD_Window_ID window
 	 */
-	protected void createPreference(String Attribute, String Value, int AD_Window_ID, String trxName) {
+	protected void createPreference(String Attribute, String Value, int AD_Window_ID, String trxName)  throws Exception  {
 		MPreference preference = new MPreference(m_ctx, 0, trxName);
 		preference.setAttribute(Attribute);
 		preference.setValue(Value);
@@ -1276,5 +789,750 @@ public class MSetup {
 	 */
 	public String getTrxName() {
 		return m_TrxName;
+	}
+	
+	/**
+	 * Create defaults documents
+	 * @throws Exception
+	 */
+	protected void createDefaultsDocuments() throws Exception {
+		// GL Categories
+		createGLCategory("Standard", MGLCategory.CATEGORYTYPE_Manual, true);
+		int GL_None = createGLCategory("None", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_GL = createGLCategory("Manual", MGLCategory.CATEGORYTYPE_Manual, false);
+		int GL_ARI = createGLCategory("AR Invoice", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_ARR = createGLCategory("AR Receipt", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_MM = createGLCategory("Material Management", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_API = createGLCategory("AP Invoice", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_APP = createGLCategory("AP Payment", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_CASH = createGLCategory("Cash/Payments", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_Manufacturing = createGLCategory("Manufacturing", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_Distribution = createGLCategory("Distribution", MGLCategory.CATEGORYTYPE_Document, false);
+		int GL_Payroll = createGLCategory("Payroll", MGLCategory.CATEGORYTYPE_Document, false);
+
+		// Base DocumentTypes
+		int ii = createDocType("GL Journal", Msg.getElement(m_ctx, "GL_Journal_ID"), MDocType.DOCBASETYPE_GLJournal,
+				null, 0, 0, 1000, GL_GL, false);
+		if (ii == 0) {
+			String err = "Document Type not created";
+			m_info.append(err);
+			throw new AdempiereException(err);
+		}
+		createDocType("GL Journal Batch", Msg.getElement(m_ctx, "GL_JournalBatch_ID"), MDocType.DOCBASETYPE_GLJournal,
+				null, 0, 0, 100, GL_GL, false);
+		// MDocType.DOCBASETYPE_GLDocument
+		//
+		int DT_I = createDocType("AR Invoice", Msg.getElement(m_ctx, "C_Invoice_ID", true),
+				MDocType.DOCBASETYPE_ARInvoice, null, 0, 0, 100000, GL_ARI, false);
+		int DT_II = createDocType("AR Invoice Indirect", Msg.getElement(m_ctx, "C_Invoice_ID", true),
+				MDocType.DOCBASETYPE_ARInvoice, null, 0, 0, 150000, GL_ARI, false);
+		int DT_IC = createDocType("AR Credit Memo", Msg.getMsg(m_ctx, "CreditMemo"), MDocType.DOCBASETYPE_ARCreditMemo,
+				null, 0, 0, 170000, GL_ARI, false);
+		// MDocType.DOCBASETYPE_ARProFormaInvoice
+
+		createDocType("AP Invoice", Msg.getElement(m_ctx, "C_Invoice_ID", false), MDocType.DOCBASETYPE_APInvoice, null,
+				0, 0, 0, GL_API, false);
+		int DT_IPC = createDocType("AP CreditMemo", Msg.getMsg(m_ctx, "CreditMemo"), MDocType.DOCBASETYPE_APCreditMemo,
+				null, 0, 0, 0, GL_API, false);
+		createDocType("Match Invoice", Msg.getElement(m_ctx, "M_MatchInv_ID", false), MDocType.DOCBASETYPE_MatchInvoice,
+				null, 0, 0, 390000, GL_API, false);
+
+		createDocType("AR Receipt", Msg.getElement(m_ctx, "C_Payment_ID", true), MDocType.DOCBASETYPE_ARReceipt, null,
+				0, 0, 0, GL_ARR, false);
+		createDocType("AP Payment", Msg.getElement(m_ctx, "C_Payment_ID", false), MDocType.DOCBASETYPE_APPayment, null,
+				0, 0, 0, GL_APP, false);
+		createDocType("Allocation", "Allocation", MDocType.DOCBASETYPE_PaymentAllocation, null, 0, 0, 490000, GL_CASH,
+				false);
+
+		int DT_S = createDocType("MM Shipment", "Delivery Note", MDocType.DOCBASETYPE_MaterialDelivery, null, 0, 0,
+				500000, GL_MM, false);
+		int DT_SI = createDocType("MM Shipment Indirect", "Delivery Note", MDocType.DOCBASETYPE_MaterialDelivery, null,
+				0, 0, 550000, GL_MM, false);
+		int DT_VRM = createDocType("MM Vendor Return", "Vendor Return", MDocType.DOCBASETYPE_MaterialDelivery, null, 0,
+				0, 590000, GL_MM, true);
+
+		createDocType("MM Receipt", "Vendor Delivery", MDocType.DOCBASETYPE_MaterialReceipt, null, 0, 0, 0, GL_MM,
+				false);
+		int DT_RM = createDocType("MM Customer Return", "Customer Return", MDocType.DOCBASETYPE_MaterialReceipt, null,
+				0, 0, 570000, GL_MM, true);
+
+		createDocType("Purchase Order", Msg.getElement(m_ctx, "C_Order_ID", false), MDocType.DOCBASETYPE_PurchaseOrder,
+				null, 0, 0, 800000, GL_None, false);
+		createDocType("Match PO", Msg.getElement(m_ctx, "M_MatchPO_ID", false), MDocType.DOCBASETYPE_MatchPO, null, 0,
+				0, 890000, GL_None, false);
+		createDocType("Purchase Requisition", Msg.getElement(m_ctx, "M_Requisition_ID", false),
+				MDocType.DOCBASETYPE_PurchaseRequisition, null, 0, 0, 900000, GL_None, false);
+		createDocType("Vendor Return Material", "Vendor Return Material Authorization",
+				MDocType.DOCBASETYPE_PurchaseOrder, MDocType.DOCSUBTYPESO_ReturnMaterial, DT_VRM, DT_IPC, 990000, GL_MM,
+				false);
+
+		createDocType("Bank Statement", Msg.getElement(m_ctx, "C_BankStatemet_ID", true),
+				MDocType.DOCBASETYPE_BankStatement, null, 0, 0, 700000, GL_CASH, false);
+		createDocType("Cash Journal", Msg.getElement(m_ctx, "C_Cash_ID", true), MDocType.DOCBASETYPE_CashJournal, null,
+				0, 0, 750000, GL_CASH, false);
+
+		createDocType("Material Movement", Msg.getElement(m_ctx, "M_Movement_ID", false),
+				MDocType.DOCBASETYPE_MaterialMovement, null, 0, 0, 610000, GL_MM, false);
+		createDocType("Physical Inventory", Msg.getElement(m_ctx, "M_Inventory_ID", false),
+				MDocType.DOCBASETYPE_MaterialPhysicalInventory, MDocType.DOCSUBTYPEINV_PhysicalInventory, 0, 0, 620000,
+				GL_MM, false);
+		createDocType("Material Production", Msg.getElement(m_ctx, "M_Production_ID", false),
+				MDocType.DOCBASETYPE_MaterialProduction, null, 0, 0, 630000, GL_MM, false);
+		createDocType("Project Issue", Msg.getElement(m_ctx, "C_ProjectIssue_ID", false),
+				MDocType.DOCBASETYPE_ProjectIssue, null, 0, 0, 640000, GL_MM, false);
+		createDocType("Internal Use Inventory", "Internal Use Inventory",
+				MDocType.DOCBASETYPE_MaterialPhysicalInventory, MDocType.DOCSUBTYPEINV_InternalUseInventory, 0, 0,
+				650000, GL_MM, false);
+		createDocType("Cost Adjustment", "Cost Adjustment", MDocType.DOCBASETYPE_MaterialPhysicalInventory,
+				MDocType.DOCSUBTYPEINV_CostAdjustment, 0, 0, 660000, GL_MM, false);
+
+		// Order Entry
+		createDocType("Binding offer", "Quotation", MDocType.DOCBASETYPE_SalesOrder, MDocType.DOCSUBTYPESO_Quotation, 0,
+				0, 10000, GL_None, false);
+		createDocType("Non binding offer", "Proposal", MDocType.DOCBASETYPE_SalesOrder, MDocType.DOCSUBTYPESO_Proposal,
+				0, 0, 20000, GL_None, false);
+		createDocType("Prepay Order", "Prepay Order", MDocType.DOCBASETYPE_SalesOrder,
+				MDocType.DOCSUBTYPESO_PrepayOrder, DT_S, DT_I, 30000, GL_None, false);
+		createDocType("Customer Return Material", "Customer Return Material Authorization",
+				MDocType.DOCBASETYPE_SalesOrder, MDocType.DOCSUBTYPESO_ReturnMaterial, DT_RM, DT_IC, 30000, GL_None,
+				false);
+		createDocType("Standard Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
+				MDocType.DOCSUBTYPESO_StandardOrder, DT_S, DT_I, 50000, GL_None, false);
+		createDocType("Credit Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
+				MDocType.DOCSUBTYPESO_OnCreditOrder, DT_SI, DT_I, 60000, GL_None, false); // RE
+		createDocType("Warehouse Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
+				MDocType.DOCSUBTYPESO_WarehouseOrder, DT_S, DT_I, 70000, GL_None, false); // LS
+
+		// Manufacturing Document
+		createDocType("Manufacturing Order", "Manufacturing Order", MDocType.DOCBASETYPE_ManufacturingOrder, null, 0, 0,
+				80000, GL_Manufacturing, false);
+		createDocType("Manufacturing Cost Collector", "Cost Collector", MDocType.DOCBASETYPE_ManufacturingCostCollector,
+				null, 0, 0, 81000, GL_Manufacturing, false);
+		createDocType("Maintenance Order", "Maintenance Order", MDocType.DOCBASETYPE_MaintenanceOrder, null, 0, 0,
+				86000, GL_Manufacturing, false);
+		createDocType("Quality Order", "Quality Order", MDocType.DOCBASETYPE_QualityOrder, null, 0, 0, 87000,
+				GL_Manufacturing, false);
+		createDocType("Distribution Order", "Distribution Order", MDocType.DOCBASETYPE_DistributionOrder, null, 0, 0,
+				88000, GL_Distribution, false);
+		// Payroll
+		createDocType("Payroll", "Payroll", MDocType.DOCBASETYPE_Payroll, null, 0, 0, 90000, GL_Payroll, false);
+
+		int DT = createDocType("POS Order", "Order Confirmation", MDocType.DOCBASETYPE_SalesOrder,
+				MDocType.DOCSUBTYPESO_POSOrder, DT_SI, DT_II, 80000, GL_None, false); // Bar
+		// POS As Default for window SO
+		createPreference("C_DocTypeTarget_ID", String.valueOf(DT), 143, getTrxName());
+
+		// Validate Completeness
+		validateDocumentTypes();
+	}
+	
+	/**
+	 * Add project
+	 * @param defaultName
+	 * @param p_Currency_ID
+	 * @param hasProject
+	 * @param isSummary
+	 * @param trxName
+	 */
+	protected void addProject(String defaultName, int p_Currency_ID, boolean hasProject, boolean isSummary,
+			String trxName) {
+		MProject project = new MProject(m_ctx, 0, trxName);
+		project.setC_Currency_ID(p_Currency_ID);
+		project.setValue(defaultName);
+		project.setName(defaultName);
+		if (project.save()) {
+			if (hasProject) {
+				String sql = "UPDATE C_AcctSchema_Element SET C_Project_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='PJ'";
+				DB.executeUpdateEx(sql, new Object[] { project.getC_Project_ID(), m_as.getC_AcctSchema_ID() }, trxName);
+			}
+		}
+	}
+
+	/**
+	 * Add new cycle
+	 * @param defaultName
+	 * @param p_Currency_ID
+	 * @param trxName
+	 */
+	protected void addCycle(String defaultName, int p_Currency_ID, String trxName) {
+		X_C_Cycle cycle = new X_C_Cycle(m_ctx, 0, trxName);
+		cycle.setC_Currency_ID(p_Currency_ID);
+		cycle.setName(defaultName);
+		cycle.saveEx();
+	}
+
+	/**
+	 * Add payment term
+	 * @param paymentTermName
+	 * @param p_NetDays
+	 * @param p_GraceDays
+	 * @param p_DiscountDays
+	 * @param p_Discount
+	 * @param p_DiscountDays2
+	 * @param p_Discount2
+	 * @param p_IsDefault
+	 * @param trxName
+	 */
+	protected void addPaymentTerm(String paymentTermName, int p_NetDays, int p_GraceDays, int p_DiscountDays,
+			BigDecimal p_Discount, int p_DiscountDays2, BigDecimal p_Discount2, boolean p_IsDefault, String trxName) {
+
+		MPaymentTerm paymentTerm = new MPaymentTerm(m_ctx, 0, trxName);
+		paymentTerm.setName(paymentTermName);
+		paymentTerm.setNetDays(p_NetDays);
+		paymentTerm.setGraceDays(p_GraceDays);
+		paymentTerm.setDiscountDays(p_DiscountDays);
+		paymentTerm.setDiscount(p_Discount);
+		paymentTerm.setDiscountDays2(p_DiscountDays2);
+		paymentTerm.setDiscount2(p_Discount2);
+		paymentTerm.setIsDefault(p_IsDefault);
+		paymentTerm.saveEx();
+	}
+
+	/**
+	 * Add product prices
+	 * @param defaultPLV
+	 * @param p_Product_ID
+	 * @param p_PriceList
+	 * @param p_PriceStd
+	 * @param p_PriceLimit
+	 * @param trxName
+	 * @return
+	 */
+	protected MProductPrice addProductPrice(MPriceListVersion defaultPLV, int p_Product_ID, BigDecimal p_PriceList,
+			BigDecimal p_PriceStd, BigDecimal p_PriceLimit, String trxName) {
+		MProductPrice pp = new MProductPrice(m_ctx, defaultPLV.getM_PriceList_Version_ID(), p_Product_ID, trxName);
+		if (p_PriceList != null)
+			pp.setPriceList(p_PriceList);
+		if (p_PriceStd != null)
+			pp.setPriceStd(p_PriceStd);
+		if (p_PriceLimit != null)
+			pp.setPriceLimit(p_PriceLimit);
+		pp.saveEx();
+		m_info.append(Msg.translate(m_lang, "M_ProductPrice_ID")).append(" inserted").append("\n");
+		return pp;
+	}
+
+	/**
+	 * Add prices list version
+	 * @param defaultPriceList
+	 * @param p_DiscountSchema
+	 * @param p_AD_Org_ID
+	 * @return
+	 */
+	protected MPriceListVersion addPriceListVersion(MPriceList defaultPriceList, MDiscountSchema p_DiscountSchema,
+			int p_AD_Org_ID) {
+		MPriceListVersion plv = new MPriceListVersion(defaultPriceList);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		plv.setAD_Org_ID(orgID);
+		plv.setName();
+		plv.setM_DiscountSchema_ID(p_DiscountSchema.getM_DiscountSchema_ID());
+		plv.saveEx();
+		m_info.append(Msg.translate(m_lang, "M_PriceListVersion_ID")).append("=").append(plv.getName())
+				.append("\n");
+		return plv;
+	}
+
+	/**
+	 * Add discount schema
+	 * @param p_AD_Org_ID
+	 * @param defaultName
+	 * @param p_DiscountType
+	 * @param trxName
+	 * @return
+	 */
+	protected MDiscountSchema addDiscountSchema(int p_AD_Org_ID, String defaultName, String p_DiscountType,
+			String trxName) {
+		MDiscountSchema ds = new MDiscountSchema(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		ds.setAD_Org_ID(orgID);
+		ds.setName(defaultName);
+		ds.setDiscountType(p_DiscountType);
+		ds.saveEx();
+		m_info.append(Msg.translate(m_lang, "M_DiscountSchema_ID")).append("=").append(defaultName).append("\n");
+		return ds;
+	}
+
+	/**
+	 * Add price list
+	 * @param p_AD_Org_ID
+	 * @param defaultName
+	 * @param p_Currency_ID
+	 * @param isDefault
+	 * @param trxName
+	 * @return
+	 */
+	protected MPriceList addPriceList(int p_AD_Org_ID, String defaultName, int p_Currency_ID, boolean isDefault,
+			String trxName) {
+		MPriceList pl = new MPriceList(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		pl.setAD_Org_ID(orgID);
+		pl.setName(defaultName);
+		pl.setC_Currency_ID(p_Currency_ID);
+		pl.setIsDefault(isDefault);
+		pl.saveEx();
+		m_info.append(Msg.translate(m_lang, "M_PriceList_ID")).append("=").append(defaultName).append("\n");
+		return pl;
+	}
+
+	/**
+	 * Update record info
+	 * @param sql
+	 * @param parameters
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected boolean updateRecordInfo(String sql, Object[] parameters, String trxName) throws Exception {
+		return DB.executeUpdateEx(sql, parameters, trxName) != 1;
+	}
+
+	/**
+	 * Add warehouse locator
+	 * @param p_Warehouse
+	 * @param p_Name
+	 * @param isDefault
+	 * @param trxName
+	 * @return
+	 */
+	protected MLocator addWarehouseLocator(MWarehouse p_Warehouse, String p_Name, boolean isDefault, String trxName) {
+		MLocator locator = new MLocator(p_Warehouse, p_Name);
+		locator.setIsDefault(isDefault);
+		if (locator.save()) {
+			m_info.append(Msg.translate(m_lang, "M_Locator_ID")).append("=").append(p_Name).append("\n");
+			return locator;
+		}
+		log.log(Level.SEVERE, "Locator NOT inserted");
+		return null;
+	}
+
+	/**
+	 * Add warehouse
+	 * @param warehouseLocation
+	 * @param p_AD_Org_ID
+	 * @param defaultName
+	 * @param trxName
+	 * @return
+	 */
+	protected MWarehouse addWarehouse(MLocation warehouseLocation, int p_AD_Org_ID, String defaultName,
+			String trxName) {
+		MWarehouse wh = new MWarehouse(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		wh.setAD_Org_ID(orgID);
+		wh.setValue(defaultName);
+		wh.setName(defaultName);
+		wh.setC_Location_ID(warehouseLocation.getC_Location_ID());
+		if (wh.save()) {
+			m_info.append(Msg.translate(m_lang, "M_Warehouse_ID")).append("=").append(defaultName).append("\n");
+			return wh;
+		}
+		log.log(Level.SEVERE, "Warehouse NOT inserted");
+
+		return null;
+	}
+
+	/**
+	 * Add product
+	 * @param productCategory
+	 * @param taxCategory
+	 * @param p_UOM_ID
+	 * @param defaultName
+	 * @param p_AD_Org_ID
+	 * @param isHasProduct
+	 * @param trxName
+	 * @return
+	 */
+	protected MProduct addProduct(MProductCategory productCategory, MTaxCategory taxCategory, int p_UOM_ID,
+			String defaultName, int p_AD_Org_ID, boolean isHasProduct, String trxName) {
+		MProduct product = new MProduct(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		product.setAD_Org_ID(orgID);
+		product.setValue(defaultName);
+		product.setName(defaultName);
+		product.setC_UOM_ID(p_UOM_ID);
+		product.setM_Product_Category_ID(productCategory.getM_Product_Category_ID());
+		product.setC_TaxCategory_ID(taxCategory.getC_TaxCategory_ID());
+		if (product.save()) {
+			m_info.append(Msg.translate(m_lang, "M_Product_ID")).append("=").append(defaultName).append("\n");
+			if (isHasProduct) {
+				String sql = "UPDATE C_AcctSchema_Element SET M_Product_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='PR'";
+				DB.executeUpdateEx(sql, new Object[] { product.getM_Product_ID(), m_as.getC_AcctSchema_ID() }, trxName);
+			}
+			return product;
+		}
+		log.log(Level.SEVERE, "Product NOT inserted");
+		return null;
+	}
+	
+	/**
+	 * Add tax
+	 * @param p_TaxCategory
+	 * @param defaultName
+	 * @param p_AD_Org_ID
+	 * @param isDefault
+	 * @param trxName
+	 * @return
+	 */
+	protected MTax addTax(MTaxCategory p_TaxCategory, String defaultName, int p_AD_Org_ID, boolean isDefault,
+			String trxName) {
+		MTax tax = new MTax(m_ctx, defaultName, Env.ZERO, p_TaxCategory.getC_TaxCategory_ID(), trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		tax.setAD_Org_ID(orgID);
+		tax.setIsDefault(isDefault);
+		if (tax.save()) {
+			m_info.append(Msg.translate(m_lang, "C_Tax_ID")).append("=").append(tax.getName()).append("\n");
+			return tax;
+		}
+		log.log(Level.SEVERE, "Tax NOT inserted");
+		return null;
+	}
+	
+	/**
+	 * Add tax category
+	 * @param taxName
+	 * @param p_AD_Org_ID
+	 * @param isDefault
+	 * @param trxName
+	 * @return
+	 */
+	protected MTaxCategory addTaxCategory(String taxName, int p_AD_Org_ID, boolean isDefault, String trxName) {
+
+		MTaxCategory taxCategory = new MTaxCategory(m_ctx, 0, trxName);
+		taxCategory.setName(taxName);
+		taxCategory.setIsDefault(isDefault);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		taxCategory.setAD_Org_ID(orgID);
+
+		if (taxCategory.save()) {
+			m_info.append(Msg.translate(m_lang, "C_TaxCategory_ID")).append("=").append(taxName).append("\n");
+			return taxCategory;
+		}
+		log.log(Level.SEVERE, "TaxCategory NOT inserted");
+		return null;
+	}
+
+	/**
+	 * Add product category
+	 * @param p_AD_Org_ID
+	 * @param defaultName
+	 * @param b
+	 * @param trxName
+	 * @return
+	 */
+	protected MProductCategory addProductCategory(int p_AD_Org_ID, String defaultName, boolean b, String trxName) {
+		MProductCategory pc = new MProductCategory(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		pc.setAD_Org_ID(orgID);
+		pc.setValue(defaultName);
+		pc.setName(defaultName);
+		pc.setIsDefault(true);
+		if (pc.save()) {
+			m_info.append(Msg.translate(m_lang, "M_Product_Category_ID")).append("=").append(defaultName).append("\n");
+			return pc;
+		}
+		log.log(Level.SEVERE, "Product Category NOT inserted");
+		return null;
+	}
+
+	/**
+	 * Add location
+	 * @param p_AD_Org_ID
+	 * @param p_Country_ID
+	 * @param p_Region_ID
+	 * @param p_City
+	 * @param isByCompany
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MLocation addLocation(int p_AD_Org_ID, int p_Country_ID, int p_Region_ID, String p_City,
+			boolean isByCompany, String trxName) throws Exception {
+		MLocation loc = new MLocation(m_ctx, p_Country_ID, p_Region_ID, p_City, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		loc.setAD_Org_ID(orgID);
+		loc.saveEx();
+		if (isByCompany) {
+			String sql = "UPDATE AD_OrgInfo SET C_Location_ID= ? WHERE AD_Org_ID= ? ";
+			DB.executeUpdateEx(sql, new Object[] { loc.getC_Location_ID(), getAD_Org_ID() }, trxName);
+		}
+		return loc;
+	}
+
+	/**
+	 * Add partner location
+	 * @param p_Partner
+	 * @param p_Location
+	 * @param p_AD_Org_ID
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MBPartnerLocation addPartnerLocation(MBPartner p_Partner, MLocation p_Location, int p_AD_Org_ID,
+			String trxName) throws Exception {
+		MBPartnerLocation bpl = new MBPartnerLocation(p_Partner);
+		bpl.setC_Location_ID(p_Location.getC_Location_ID());
+		bpl.saveEx();
+		return bpl;
+	}
+
+	/**
+	 * Add business partner
+	 * @param bpGroup
+	 * @param defaultName
+	 * @param p_AD_Org_ID
+	 * @param isHasPartner
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MBPartner addBPartner(MBPGroup bpGroup, String defaultName, int p_AD_Org_ID, boolean isHasPartner,
+			String trxName) throws Exception {
+		MBPartner bp = new MBPartner(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		bp.setAD_Org_ID(orgID);
+		bp.setValue(defaultName);
+		bp.setName(defaultName);
+		bp.setBPGroup(bpGroup);
+		bp.saveEx();
+		m_info.append(Msg.translate(m_lang, "C_BPartner_ID")).append("=").append(defaultName).append("\n");
+		if (isHasPartner) {
+			String sql = "UPDATE C_AcctSchema_Element SET C_BPartner_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='BP'";
+			DB.executeUpdateEx(sql, new Object[] { bp.getC_BPartner_ID(), m_as.getC_AcctSchema_ID() }, trxName);
+		}
+		return bp;
+	}
+
+	/**
+	 * Add business partner group
+	 * @param defaultName
+	 * @param p_AD_Org_ID
+	 * @param isDefault
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MBPGroup addBPGroup(String defaultName, int p_AD_Org_ID, boolean isDefault, String trxName) throws Exception {
+		MBPGroup bpGroup = new MBPGroup(m_ctx, 0, trxName);
+		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
+		bpGroup.setAD_Org_ID(orgID);
+		bpGroup.setValue(defaultName);
+		bpGroup.setName(defaultName);
+		bpGroup.setIsDefault(isDefault);
+		bpGroup.saveEx();
+		m_info.append(Msg.translate(m_lang, "C_BP_Group_ID")).append("=").append(defaultName).append("\n");
+		return bpGroup;
+	}
+
+	/**
+	 * Add activity
+	 * @param defaultName
+	 * @param isHasActivity
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MActivity addActivity(String defaultName, boolean isHasActivity, String trxName) throws Exception {
+		MActivity activity = new MActivity(m_ctx, 0, trxName);
+		activity.setName(defaultName);
+		activity.saveEx();
+
+		if (isHasActivity) {
+			String sql = "UPDATE C_AcctSchema_Element SET C_Activity_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='SR'";
+			DB.executeUpdateEx(sql, new Object[] { activity.getC_Activity_ID(), m_as.getC_AcctSchema_ID() }, trxName);
+		}
+		return activity;
+	}
+
+	/**
+	 * Add sales region
+	 * @param defaultName
+	 * @param isHasRegion
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MSalesRegion addSalesRegion(String defaultName, boolean isHasRegion, String trxName) throws Exception  {
+		MSalesRegion salesRegion = new MSalesRegion(m_ctx, 0, trxName);
+		salesRegion.setName(defaultName);
+		salesRegion.saveEx();
+
+		if (isHasRegion) {
+			String sql = "UPDATE C_AcctSchema_Element SET C_SalesRegion_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='SR'";
+			DB.executeUpdateEx(sql, new Object[] { salesRegion.getC_SalesRegion_ID(), m_as.getC_AcctSchema_ID() },
+					trxName);
+		}
+		return salesRegion;
+	}
+
+	/**
+	 * Add channel
+	 * @param name
+	 * @param isHasCampign
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected X_C_Channel addChannel(String name, boolean isHasCampign, String trxName) throws Exception{
+		X_C_Channel channel = new X_C_Channel(m_ctx, 0, trxName);
+		channel.setName(name);
+		channel.saveEx();
+		return channel;
+	}
+	
+	/**
+	 * Add campaign
+	 * @param channel
+	 * @param name
+	 * @param isHasCampign
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected X_C_Campaign addCampaign(X_C_Channel channel, String name, boolean isHasCampign, String trxName) throws Exception {
+		X_C_Campaign campaing = new X_C_Campaign(m_ctx, 0, trxName);
+		campaing.setName(name);
+		campaing.setC_Channel_ID(channel.getC_Channel_ID());
+		campaing.saveEx();
+
+		if (isHasCampign) {
+			String sql = "UPDATE C_AcctSchema_Element SET C_Campaign_ID= ? WHERE C_AcctSchema_ID= ? AND ElementType ='MC'";
+			DB.executeUpdateEx(sql, new Object[] { campaing.getC_Campaign_ID(), m_as.getC_AcctSchema_ID() }, trxName);
+		}
+		return campaing;
+	}
+	
+	/**
+	 * Add org info
+	 * @param p_AD_Org_ID
+	 * @param trxName
+	 * @return
+	 */
+	protected MOrgInfo addOrgInfo(int p_AD_Org_ID, String trxName) {
+		return MOrgInfo.getCopy(m_ctx, p_AD_Org_ID, trxName);
+	}
+
+	/**
+	 * Add organization
+	 * @param m_client2
+	 * @param orgValue
+	 * @param name
+	 * @return
+	 * @throws Exception
+	 */
+	protected MOrg addOrganization(MClient m_client2, String orgValue, String name) throws Exception{
+		MOrg org = new MOrg(m_client, orgValue, name);
+		org.saveEx();
+		return org;
+	}
+
+	/**
+	 * Add processor
+	 * @param processor
+	 * @param adminClientUser
+	 * @throws Exception
+	 */
+	protected void addProcessors(Class<?> processor, MUser adminClientUser) throws Exception {
+		if (MAcctProcessor.class.isInstance(processor)) {
+			MAcctProcessor ap = new MAcctProcessor(m_client, adminClientUser.getAD_User_ID());
+			ap.setAD_Schedule_ID(SCHEDULE_10_MINUTES);
+			ap.saveEx();
+		} else if (MRequestProcessor.class.isInstance(processor)) {
+			MRequestProcessor rp = new MRequestProcessor(m_client, adminClientUser.getAD_User_ID());
+			rp.setAD_Schedule_ID(SCHEDULE_15_MINUTES);
+			rp.saveEx();
+		}
+	}
+
+	/**
+	 * Add user role
+	 * @param user
+	 * @param role
+	 * @param trxName
+	 * @throws Exception
+	 */
+	protected void addUserRole(MUser user, MRole role, String trxName) throws Exception {
+		// ClientUser - Admin & User
+		X_AD_User_Roles userRole = new X_AD_User_Roles(m_ctx, 0, trxName);
+		userRole.setAD_Role_ID(role.getAD_Role_ID());
+		userRole.setAD_User_ID(user.getAD_User_ID());
+		userRole.saveEx();
+	}
+
+	/**
+	 * Add user
+	 * @param p_AD_Client_ID
+	 * @param name
+	 * @param email
+	 * @param isSetInitialPassword
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MUser addUser(int p_AD_Client_ID, String name, String email, boolean isSetInitialPassword,
+			String trxName) throws Exception {
+		MUser user = new MUser(m_ctx, 0, trxName);
+		if (isSetInitialPassword)
+			user.setPassword(name);
+		user.setDescription(name);
+		user.setName(name);
+		user.setAD_Client_ID(p_AD_Client_ID);
+		user.setAD_Org_ID(0);
+		user.setEMail(email);
+		user.saveEx();
+		return user;
+	}
+
+	/**
+	 * Add organization access by role
+	 * @param role
+	 * @param p_AD_Org_ID
+	 * @throws Exception
+	 */
+	protected void addOrgAccessRole(MRole role, int p_AD_Org_ID) throws Exception {
+		// OrgAccess x, 0
+		MRoleOrgAccess adminClientAccess = new MRoleOrgAccess(role, p_AD_Org_ID);
+		adminClientAccess.saveEx();
+	}
+
+	/**
+	 * Add role
+	 * @param name
+	 * @param isAdmin
+	 * @param p_UserLevel
+	 * @param p_PreferenceType
+	 * @param isAccessAvanced
+	 * @param trxName
+	 * @return
+	 * @throws Exception
+	 */
+	protected MRole addRole(String name, boolean isAdmin, String p_UserLevel, String p_PreferenceType,
+			boolean isAccessAvanced, String trxName) throws Exception {
+		MRole role = new MRole(m_ctx, 0, trxName);
+		role.setClientOrg(m_client);
+		role.setName(name);
+		role.setUserLevel(p_UserLevel);
+		role.setPreferenceType(p_PreferenceType);
+		role.setIsShowAcct(true);
+		role.setIsAccessAdvanced(isAccessAvanced);
+		role.setIsClientAdministrator(isAdmin);
+		role.saveEx();
+		return role;
+	}
+	
+	/**
+	 * Validate document types
+	 * @throws Exception
+	 */
+	protected void validateDocumentTypes() throws Exception{
+		ProcessInfo processInfo = new ProcessInfo("Document Type Verify", 0);
+		processInfo.setAD_Client_ID(getAD_Client_ID());
+		processInfo.setAD_User_ID(getAD_User_ID());
+		processInfo.setParameter(new ProcessInfoParameter[0]);
+		processInfo.setClassName("org.compiere.process.DocumentTypeVerify");
+		if (!ProcessUtil.startJavaProcess(m_ctx, processInfo, m_trx, false)) {
+			String err = "Document type verification failed. Message=" + processInfo.getSummary();
+			log.log(Level.SEVERE, err);
+			m_info.append(err);
+			throw new AdempiereException(err);
+		}
 	}
 } // MSetup

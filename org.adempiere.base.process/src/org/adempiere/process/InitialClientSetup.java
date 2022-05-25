@@ -293,7 +293,7 @@ public class InitialClientSetup extends SvrProcess
 			KeyNamePair currency_kp = new KeyNamePair(p_C_Currency_ID, currency.getDescription());
 			ms.createAccounting(currency_kp,
 					p_IsUseProductDimension, p_IsUseBPDimension, p_IsUseProjectDimension, p_IsUseCampaignDimension, p_IsUseSalesRegionDimension, p_IsUseActivityDimension,
-					coaFile, p_UseDefaultCoA, p_InactivateDefaults);
+					coaFile, p_UseDefaultCoA, p_InactivateDefaults, true);
 
 			//  Generate Entities
 			ms.createEntities(p_C_Country_ID, p_CityName, p_C_Region_ID, p_C_Currency_ID, p_Postal, p_Address1);
