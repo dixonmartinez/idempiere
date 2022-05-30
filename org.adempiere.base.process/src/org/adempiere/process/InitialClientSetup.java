@@ -31,6 +31,8 @@ package org.adempiere.process;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 
@@ -50,17 +52,18 @@ import org.compiere.util.KeyNamePair;
 import org.compiere.util.Msg;
 import org.compiere.util.Trx;
 import org.compiere.util.Util;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
 
 /**
- * 	Process to create a new client (tenant)
- *	
- *  @author Carlos Ruiz
- *    [ 2598506 ] FR - Implement Initial Client Setup
+ * Process to create a new client (tenant)
+ * 
+ * @author Carlos Ruiz [ 2598506 ] FR - Implement Initial Client Setup
  */
 @org.adempiere.base.annotation.Process
-public class InitialClientSetup extends SvrProcess
-{
-	
+public class InitialClientSetup extends SvrProcess {
+
 	// Process Parameters
 	private String p_ClientName = null;
 	private String p_OrgValue = null;
@@ -94,16 +97,14 @@ public class InitialClientSetup extends SvrProcess
 	private String p_Classname = null;
 
 	/** WindowNo for this process */
-	public static final int     WINDOW_THIS_PROCESS = 9999;
+	public static final int WINDOW_THIS_PROCESS = 9999;
 
 	/**
-	 * 	Prepare
+	 * Prepare
 	 */
-	protected void prepare ()
-	{
+	protected void prepare() {
 		ProcessInfoParameter[] para = getParameter();
-		for (int i = 0; i < para.length; i++)
-		{
+		for (int i = 0; i < para.length; i++) {
 			String name = para[i].getParameterName();
 			if (para[i].getParameter() == null)
 				;
@@ -173,70 +174,66 @@ public class InitialClientSetup extends SvrProcess
 	}
 
 	/**
-	 * 	Process
-	 *	@return info
-	 *	@throws Exception
+	 * Process
+	 * 
+	 * @return info
+	 * @throws Exception
 	 */
-	protected String doIt () throws Exception
-	{
+	protected String doIt() throws Exception {
 		boolean isDryRun = "Y".equalsIgnoreCase(Env.getContext(Env.getCtx(), Env.RUNNING_UNIT_TESTING_TEST_CASE));
-		
-		StringBuilder msglog = new StringBuilder("InitialClientSetup")
-								.append(": ClientName=").append(p_ClientName)
-								.append(", OrgValue=").append(p_OrgValue)
-								.append(", OrgName=").append(p_OrgName)
-								.append(", AdminUserName=").append(p_AdminUserName)
-								.append(", NormalUserName=").append(p_NormalUserName)
-								.append(", IsSetInitialPassword=").append(p_IsSetInitialPassword)
-								.append(", C_Currency_ID=").append(p_C_Currency_ID)
-								.append(", C_Country_ID=").append(p_C_Country_ID)
-								.append(", C_Region_ID=").append(p_C_Region_ID)
-								.append(", CityName=").append(p_CityName)
-								.append(", C_City_ID=").append(p_C_City_ID)
-								.append(", IsUseBPDimension=").append(p_IsUseBPDimension)
-								.append(", IsUseProductDimension=").append(p_IsUseProductDimension)
-								.append(", IsUseProjectDimension=").append(p_IsUseProjectDimension)
-								.append(", IsUseCampaignDimension=").append(p_IsUseCampaignDimension)
-								.append(", IsUseSalesRegionDimension=").append(p_IsUseSalesRegionDimension)
-								.append(", IsUseActivityDimension=").append(p_IsUseActivityDimension)
-								.append(", UseDefaultCoA=").append(p_UseDefaultCoA)
-								.append(", InactivateDefaults=").append(p_InactivateDefaults)
-								.append(", CoAFile=").append(p_CoAFile);
-		
-		if (log.isLoggable(Level.INFO)) log.info(msglog.toString());
+
+		StringBuilder msglog = new StringBuilder("InitialClientSetup").append(": ClientName=").append(p_ClientName)
+				.append(", OrgValue=").append(p_OrgValue).append(", OrgName=").append(p_OrgName)
+				.append(", AdminUserName=").append(p_AdminUserName).append(", NormalUserName=").append(p_NormalUserName)
+				.append(", IsSetInitialPassword=").append(p_IsSetInitialPassword).append(", C_Currency_ID=")
+				.append(p_C_Currency_ID).append(", C_Country_ID=").append(p_C_Country_ID).append(", C_Region_ID=")
+				.append(p_C_Region_ID).append(", CityName=").append(p_CityName).append(", C_City_ID=")
+				.append(p_C_City_ID).append(", IsUseBPDimension=").append(p_IsUseBPDimension)
+				.append(", IsUseProductDimension=").append(p_IsUseProductDimension).append(", IsUseProjectDimension=")
+				.append(p_IsUseProjectDimension).append(", IsUseCampaignDimension=").append(p_IsUseCampaignDimension)
+				.append(", IsUseSalesRegionDimension=").append(p_IsUseSalesRegionDimension)
+				.append(", IsUseActivityDimension=").append(p_IsUseActivityDimension).append(", UseDefaultCoA=")
+				.append(p_UseDefaultCoA).append(", InactivateDefaults=").append(p_InactivateDefaults)
+				.append(", CoAFile=").append(p_CoAFile);
+
+		if (log.isLoggable(Level.INFO))
+			log.info(msglog.toString());
 
 		// Validations
 		if (p_UseDefaultCoA)
 			p_CoAFile = null;
 
 		// Validate Mandatory parameters
-		if (   p_ClientName == null || p_ClientName.length() == 0
-			|| p_OrgName == null || p_OrgName.length() == 0
-			|| p_AdminUserName == null || p_AdminUserName.length() == 0
-			|| p_NormalUserName == null || p_NormalUserName.length() == 0
-			|| p_C_Currency_ID <= 0
-			|| p_C_Country_ID <= 0
-			|| (!p_UseDefaultCoA && (p_CoAFile == null || p_CoAFile.length() == 0))
-			)
+		if (p_ClientName == null || p_ClientName.length() == 0 || p_OrgName == null || p_OrgName.length() == 0
+				|| p_AdminUserName == null || p_AdminUserName.length() == 0 || p_NormalUserName == null
+				|| p_NormalUserName.length() == 0 || p_C_Currency_ID <= 0 || p_C_Country_ID <= 0
+				|| (!p_UseDefaultCoA && (p_CoAFile == null || p_CoAFile.length() == 0)))
 			throw new IllegalArgumentException(Msg.getMsg(Env.getCtx(), "Missing required parameters"));
 
 		// Validate Uniqueness of client and users name
-		//	Unique Client Name
-		if (DB.executeUpdate("UPDATE AD_Client SET CreatedBy=0 WHERE Name=?", new Object[] {p_ClientName}, false, null) != 0)
+		// Unique Client Name
+		if (DB.executeUpdate("UPDATE AD_Client SET CreatedBy=0 WHERE Name=?", new Object[] { p_ClientName }, false,
+				null) != 0)
 			throw new AdempiereException(Msg.parseTranslation(getCtx(), "@NotUnique@ @ClientName@ = " + p_ClientName));
 
-		//	Unique User Names
-		if (DB.executeUpdate("UPDATE AD_User SET CreatedBy=0 WHERE Name=?", new Object[] {p_AdminUserName}, false, null) != 0)
-			throw new AdempiereException(Msg.parseTranslation(getCtx(), "@NotUnique@ @AdminUserName@ = " + p_AdminUserName));
-		if (DB.executeUpdate("UPDATE AD_User SET CreatedBy=0 WHERE Name=?", new Object[] {p_NormalUserName}, false, null) != 0)
-			throw new AdempiereException(Msg.parseTranslation(getCtx(), "@NotUnique@ @NormalUserName@ = " + p_NormalUserName));
+		// Unique User Names
+		if (DB.executeUpdate("UPDATE AD_User SET CreatedBy=0 WHERE Name=?", new Object[] { p_AdminUserName }, false,
+				null) != 0)
+			throw new AdempiereException(
+					Msg.parseTranslation(getCtx(), "@NotUnique@ @AdminUserName@ = " + p_AdminUserName));
+		if (DB.executeUpdate("UPDATE AD_User SET CreatedBy=0 WHERE Name=?", new Object[] { p_NormalUserName }, false,
+				null) != 0)
+			throw new AdempiereException(
+					Msg.parseTranslation(getCtx(), "@NotUnique@ @NormalUserName@ = " + p_NormalUserName));
 
 		// City_ID overrides CityName if both used
 		if (p_C_City_ID > 0) {
 			MCity city = MCity.get(getCtx(), p_C_City_ID);
-			if (! city.getName().equals(p_CityName)) {
-				msglog = new StringBuilder("City name changed from ").append(p_CityName).append(" to ").append(city.getName());
-				if (log.isLoggable(Level.INFO)) log.info(msglog.toString());
+			if (!city.getName().equals(p_CityName)) {
+				msglog = new StringBuilder("City name changed from ").append(p_CityName).append(" to ")
+						.append(city.getName());
+				if (log.isLoggable(Level.INFO))
+					log.info(msglog.toString());
 				p_CityName = city.getName();
 			}
 		}
@@ -244,68 +241,99 @@ public class InitialClientSetup extends SvrProcess
 		// Validate existence and read permissions on CoA file
 		boolean email_login = MSysConfig.getBooleanValue(MSysConfig.USE_EMAIL_FOR_LOGIN, false);
 		if (email_login) {
-			if (Util.isEmpty(p_AdminUserEmail)) 
+			if (Util.isEmpty(p_AdminUserEmail))
 				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "AdminUserEmail is required"));
-			if (! EMail.validate(p_AdminUserEmail)) 
-				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "AdminUserEmail") + " "  + p_AdminUserEmail + " " + Msg.getMsg(Env.getCtx(), "is incorrect") );
-			if (Util.isEmpty(p_NormalUserEmail)) 
-				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "NormalUserEmail is required") );
-			if (! EMail.validate(p_NormalUserEmail)) 
-				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "NormalUserEmail") + " " + p_NormalUserEmail + " " + Msg.getMsg(Env.getCtx(), "is incorrect"));
+			if (!EMail.validate(p_AdminUserEmail))
+				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "AdminUserEmail") + " " + p_AdminUserEmail + " "
+						+ Msg.getMsg(Env.getCtx(), "is incorrect"));
+			if (Util.isEmpty(p_NormalUserEmail))
+				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "NormalUserEmail is required"));
+			if (!EMail.validate(p_NormalUserEmail))
+				throw new AdempiereException(Msg.getMsg(Env.getCtx(), "NormalUserEmail") + " " + p_NormalUserEmail + " "
+						+ Msg.getMsg(Env.getCtx(), "is incorrect"));
 		}
 		if (Util.isEmpty(p_CoAFile, true))
-			p_CoAFile = MSysConfig.getValue(MSysConfig.DEFAULT_COA_PATH,
-					Adempiere.getAdempiereHome() + File.separator + "data"
-							+ File.separator + "import"
-							+ File.separator + "AccountingDefaultsOnly.csv");
+			p_CoAFile = MSysConfig.getValue(MSysConfig.DEFAULT_COA_PATH, Adempiere.getAdempiereHome() + File.separator
+					+ "data" + File.separator + "import" + File.separator + "AccountingDefaultsOnly.csv");
 		File coaFile = new File(p_CoAFile);
 		if (!coaFile.exists())
-			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "CoaFile") + " " + p_CoAFile + " " + Msg.getMsg(Env.getCtx(), "does not exist") );
+			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "CoaFile") + " " + p_CoAFile + " "
+					+ Msg.getMsg(Env.getCtx(), "does not exist"));
 		if (!coaFile.canRead())
 			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "Cannot read CoaFile") + " " + p_CoAFile);
 		if (!coaFile.isFile())
-			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "CoaFile") + " " + p_CoAFile + " " + Msg.getMsg(Env.getCtx(), "is not a file"));
+			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "CoaFile") + " " + p_CoAFile + " "
+					+ Msg.getMsg(Env.getCtx(), "is not a file"));
 		if (coaFile.length() <= 0L)
-			throw new AdempiereException(Msg.getMsg(Env.getCtx(), "CoaFile") +  " " + p_CoAFile + " " + Msg.getMsg(Env.getCtx(), "is empty"));
+			throw new AdempiereException(
+					Msg.getMsg(Env.getCtx(), "CoaFile") + " " + p_CoAFile + " " + Msg.getMsg(Env.getCtx(), "is empty"));
 
 		// Process
 		MSetup ms = null;
 		Class<?> setupClass = null;
 		Trx m_trx = Trx.get(get_TrxName(), false);
-		if(p_Classname != null 
-				&& p_Classname.length() > 0) {
-			setupClass = Class.forName(p_Classname);
-			Constructor<?> construct = setupClass.getDeclaredConstructor(new Class[] {Properties.class, int.class,Trx.class});
-			ms = (MSetup) construct.newInstance(new Object[] {getCtx(), WINDOW_THIS_PROCESS, m_trx});
-		}
-		
-		if(ms == null)
-			ms = new MSetup(getCtx(), WINDOW_THIS_PROCESS, m_trx);
-		
 		try {
-			ms.createClient(p_ClientName, p_OrgValue, p_OrgName, p_AdminUserName, p_NormalUserName ,
-					p_Phone, p_Phone2, p_Fax, p_EMail, p_TaxID, p_AdminUserEmail, p_NormalUserEmail, p_IsSetInitialPassword);
-				
+			if (p_Classname != null && p_Classname.length() > 0) {
+				setupClass = resolveTheClassName(p_Classname);
+				Constructor<?> construct = setupClass
+						.getDeclaredConstructor(new Class[] { Properties.class, int.class, Trx.class });
+				ms = (MSetup) construct.newInstance(new Object[] { getCtx(), WINDOW_THIS_PROCESS, m_trx });
+			}
+		} catch (Exception e) {
+		} finally {
+			if (ms == null)
+				ms = new MSetup(getCtx(), WINDOW_THIS_PROCESS, m_trx);
+		}
+
+		try {
+			ms.createClient(p_ClientName, p_OrgValue, p_OrgName, p_AdminUserName, p_NormalUserName, p_Phone, p_Phone2,
+					p_Fax, p_EMail, p_TaxID, p_AdminUserEmail, p_NormalUserEmail, p_IsSetInitialPassword);
+
 			addLog(ms.getInfo());
 
-			//  Generate Accounting
+			// Generate Accounting
 			MCurrency currency = MCurrency.get(getCtx(), p_C_Currency_ID);
 			KeyNamePair currency_kp = new KeyNamePair(p_C_Currency_ID, currency.getDescription());
-			ms.createAccounting(currency_kp,
-					p_IsUseProductDimension, p_IsUseBPDimension, p_IsUseProjectDimension, p_IsUseCampaignDimension, p_IsUseSalesRegionDimension, p_IsUseActivityDimension,
-					coaFile, p_UseDefaultCoA, p_InactivateDefaults, true);
+			ms.createAccounting(currency_kp, p_IsUseProductDimension, p_IsUseBPDimension, p_IsUseProjectDimension,
+					p_IsUseCampaignDimension, p_IsUseSalesRegionDimension, p_IsUseActivityDimension, coaFile,
+					p_UseDefaultCoA, p_InactivateDefaults, true);
 
-			//  Generate Entities
+			// Generate Entities
 			ms.createEntities(p_C_Country_ID, p_CityName, p_C_Region_ID, p_C_Currency_ID, p_Postal, p_Address1);
 			addLog(ms.getInfo());
 
-			//	Create Print Documents
+			// Create Print Documents
 			PrintUtil.setupPrintForm(ms.getAD_Client_ID(), isDryRun ? null : ms.getTrxName());
 		} catch (Exception e) {
 			throw e;
 		}
 
 		return "@OK@";
+	}
+
+	@SuppressWarnings("unchecked")
+	public <T> Class<T> resolveTheClassName(String className) throws ClassNotFoundException {
+		BundleContext bundleContext = FrameworkUtil.getBundle(this.getClass()).getBundleContext();
+		List<Class<?>> foundClasses = findClass(bundleContext, className);
+		if (foundClasses.isEmpty()) {
+			return (Class<T>) Class.forName(className);
+		} else {
+			return (Class<T>) foundClasses.get(0);
+		}
+	}
+
+	private List<Class<?>> findClass(BundleContext context, String name) {
+		List<Class<?>> result = new ArrayList<Class<?>>();
+		for (Bundle b : context.getBundles()) {
+			try {
+				Class<?> c = b.loadClass(name);
+				result.add(c);
+				break;
+			} catch (ClassNotFoundException e) {
+				// No problem, this bundle doesn't have the class
+			}
+		}
+		return result;
 	}
 
 }
