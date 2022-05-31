@@ -973,7 +973,7 @@ public class MSetup {
 	 * @param p_IsDefault
 	 * @param trxName
 	 */
-	protected void addPaymentTerm(String paymentTermName, int p_NetDays, int p_GraceDays, int p_DiscountDays,
+	protected MPaymentTerm addPaymentTerm(String paymentTermName, int p_NetDays, int p_GraceDays, int p_DiscountDays,
 			BigDecimal p_Discount, int p_DiscountDays2, BigDecimal p_Discount2, boolean p_IsDefault, String trxName) {
 
 		MPaymentTerm paymentTerm = new MPaymentTerm(m_ctx, 0, trxName);
@@ -986,6 +986,32 @@ public class MSetup {
 		paymentTerm.setDiscount2(p_Discount2);
 		paymentTerm.setIsDefault(p_IsDefault);
 		paymentTerm.saveEx();
+		return paymentTerm;
+	}
+	
+	/**
+	 * Add payment term
+	 * @param paymentTermName
+	 * @param p_NetDays
+	 * @param p_GraceDays
+	 * @param p_DiscountDays
+	 * @param p_Discount
+	 * @param p_DiscountDays2
+	 * @param p_Discount2
+	 * @param p_IsDefault
+	 * @param trxName
+	 */
+	protected MPaySchedule addPaySchedule(MPaymentTerm paymentTerm, BigDecimal p_Percentage, int p_NetDays, int p_DiscountDays, BigDecimal p_Discount, String trxName) {
+
+		MPaySchedule paySchedule = new MPaySchedule(m_ctx, 0, trxName);
+		paySchedule.setParent(paymentTerm);
+		paySchedule.setC_PaymentTerm_ID(paymentTerm.getC_PaymentTerm_ID());
+		paySchedule.setPercentage(p_Percentage);
+		paySchedule.setNetDays(p_NetDays);
+		paySchedule.setDiscountDays(p_DiscountDays);
+		paySchedule.setDiscount(p_Discount);
+		paySchedule.saveEx();
+		return paySchedule;
 	}
 
 	/**
@@ -1048,8 +1074,30 @@ public class MSetup {
 		ds.setName(defaultName);
 		ds.setDiscountType(p_DiscountType);
 		ds.saveEx();
+		addDiscountSchemaLine(ds, MConversionType.getDefault(getAD_Client_ID()), trxName);
 		m_info.append(Msg.translate(m_lang, "M_DiscountSchema_ID")).append("=").append(defaultName).append("\n");
 		return ds;
+	}
+	
+	/**
+	 * Add Discount schema Line
+	 * @param defaultDiscountSchema
+	 * @param p_C_ConversionType_ID
+	 * @param p_TrxName
+	 * @return
+	 */
+	protected MDiscountSchemaLine addDiscountSchemaLine(MDiscountSchema defaultDiscountSchema, int p_C_ConversionType_ID, String p_TrxName) {
+		MDiscountSchemaLine dsl = new MDiscountSchemaLine(m_ctx, 0, p_TrxName);
+		dsl.setC_ConversionType_ID(p_C_ConversionType_ID);
+		dsl.saveEx();
+		return dsl;
+	}
+	
+	protected void addProductPO(MProduct product, MBPartner vendorPartner, int p_C_Currency_ID, String trxName) {
+		MProductPO productPO = new MProductPO(m_ctx, p_C_Currency_ID, trxName);
+		productPO.setM_Product_ID(product.getM_Product_ID());
+		productPO.setVendorProductNo(product.getValue());
+		productPO.saveEx();
 	}
 
 	/**
@@ -1218,13 +1266,13 @@ public class MSetup {
 	 * @param trxName
 	 * @return
 	 */
-	protected MProductCategory addProductCategory(int p_AD_Org_ID, String defaultName, boolean b, String trxName) {
+	protected MProductCategory addProductCategory(int p_AD_Org_ID, String defaultName, boolean isDefault, String trxName) {
 		MProductCategory pc = new MProductCategory(m_ctx, 0, trxName);
 		int orgID = p_AD_Org_ID > 0 ? p_AD_Org_ID : 0;
 		pc.setAD_Org_ID(orgID);
 		pc.setValue(defaultName);
 		pc.setName(defaultName);
-		pc.setIsDefault(true);
+		pc.setIsDefault(isDefault);
 		if (pc.save()) {
 			m_info.append(Msg.translate(m_lang, "M_Product_Category_ID")).append("=").append(defaultName).append("\n");
 			return pc;
