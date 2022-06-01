@@ -24,6 +24,7 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.util.Properties;
 import java.util.logging.Level;
 
@@ -1074,7 +1075,7 @@ public class MSetup {
 		ds.setName(defaultName);
 		ds.setDiscountType(p_DiscountType);
 		ds.saveEx();
-		addDiscountSchemaLine(ds, MConversionType.getDefault(getAD_Client_ID()), trxName);
+		addDiscountSchemaLine(ds, MConversionType.getDefault(getAD_Client_ID()), Env.getContextAsDate(m_ctx, Env.DATE), trxName);
 		m_info.append(Msg.translate(m_lang, "M_DiscountSchema_ID")).append("=").append(defaultName).append("\n");
 		return ds;
 	}
@@ -1083,20 +1084,44 @@ public class MSetup {
 	 * Add Discount schema Line
 	 * @param defaultDiscountSchema
 	 * @param p_C_ConversionType_ID
+	 * @param convertDate 
 	 * @param p_TrxName
 	 * @return
 	 */
-	protected MDiscountSchemaLine addDiscountSchemaLine(MDiscountSchema defaultDiscountSchema, int p_C_ConversionType_ID, String p_TrxName) {
+	protected MDiscountSchemaLine addDiscountSchemaLine(MDiscountSchema defaultDiscountSchema, int p_C_ConversionType_ID, Timestamp convertDate, String p_TrxName) {
 		MDiscountSchemaLine dsl = new MDiscountSchemaLine(m_ctx, 0, p_TrxName);
 		dsl.setC_ConversionType_ID(p_C_ConversionType_ID);
+		dsl.setM_DiscountSchema_ID(defaultDiscountSchema.getM_DiscountSchema_ID());
+		dsl.setConversionDate(convertDate);
+		dsl.setSeqNo(10);
+		dsl.setList_Base(X_M_DiscountSchemaLine.LIST_BASE_ListPrice);
+		dsl.setList_AddAmt(Env.ZERO)  ;
+		dsl.setList_Discount(Env.ZERO)  ;
+		dsl.setStd_Base(X_M_DiscountSchemaLine.STD_BASE_ListPrice)  ;
+		dsl.setStd_AddAmt(Env.ZERO)  ;
+		dsl.setStd_Discount(Env.ZERO)  ;
+		dsl.setLimit_Base(X_M_DiscountSchemaLine.LIMIT_BASE_ListPrice)  ;
+		dsl.setLimit_AddAmt(Env.ZERO)  ;
+		dsl.setLimit_Discount(Env.ZERO)  ;
+		dsl.setList_MinAmt(Env.ZERO)  ;
+		dsl.setList_MaxAmt(Env.ZERO)  ;
+		dsl.setList_Rounding(X_M_DiscountSchemaLine.LIST_ROUNDING_CurrencyPrecision)  ;
+		dsl.setStd_MinAmt(Env.ZERO)  ;
+		dsl.setStd_MaxAmt(Env.ZERO)  ;
+		dsl.setStd_Rounding(X_M_DiscountSchemaLine.LIST_ROUNDING_CurrencyPrecision)  ;
+		dsl.setLimit_MinAmt(Env.ZERO)  ;
+		dsl.setLimit_MaxAmt(Env.ZERO)  ;
+		dsl.setLimit_Rounding(X_M_DiscountSchemaLine.LIST_ROUNDING_CurrencyPrecision)  ;
 		dsl.saveEx();
 		return dsl;
 	}
 	
 	protected void addProductPO(MProduct product, MBPartner vendorPartner, int p_C_Currency_ID, String trxName) {
-		MProductPO productPO = new MProductPO(m_ctx, p_C_Currency_ID, trxName);
+		MProductPO productPO = new MProductPO(m_ctx, 0, trxName);
 		productPO.setM_Product_ID(product.getM_Product_ID());
 		productPO.setVendorProductNo(product.getValue());
+		productPO.setC_Currency_ID(p_C_Currency_ID);
+		productPO.setC_BPartner_ID(vendorPartner.getC_BPartner_ID());
 		productPO.saveEx();
 	}
 
@@ -1582,5 +1607,33 @@ public class MSetup {
 			m_info.append(err);
 			throw new AdempiereException(err);
 		}
+	}
+
+	protected MBank addBank(int i, String name, String routingNo, String switchCode, boolean isOwnBank, String trxName) {
+		MBank bank = new MBank(m_ctx, 0, trxName);
+		bank.setName(name);
+		bank.setRoutingNo(routingNo);
+		bank.setIsOwnBank(isOwnBank);
+		bank.setSwiftCode(switchCode);
+		bank.saveEx();
+		return bank;
+	}
+
+	protected MBankAccount addBankAccount(MBank bank, String accountNo, int currency_ID, String accountType, String trxName) {
+		MBankAccount bankAccount = new MBankAccount(m_ctx, 0, trxName);
+		bankAccount.setC_Bank_ID(bank.getC_Bank_ID());
+		bankAccount.setAccountNo(accountNo);
+		bankAccount.setC_Currency_ID(currency_ID);
+		bankAccount.setBankAccountType(accountType);
+		bankAccount.saveEx();
+		return bankAccount;
+	}
+
+	protected void addBankAccountDoc(MBankAccount bankAccount, String name, String paymentRule, String trxName) {
+		X_C_BankAccountDoc bankAccountDoc = new X_C_BankAccountDoc(m_ctx, 0, trxName);
+		bankAccountDoc.setC_BankAccount_ID(bankAccount.getC_BankAccount_ID());
+		bankAccountDoc.setName(name);
+		bankAccountDoc.setPaymentRule(paymentRule);
+		bankAccountDoc.saveEx();
 	}
 } // MSetup
