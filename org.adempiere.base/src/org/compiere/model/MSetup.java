@@ -1619,21 +1619,23 @@ public class MSetup {
 		return bank;
 	}
 
-	protected MBankAccount addBankAccount(MBank bank, String accountNo, int currency_ID, String accountType, String trxName) {
+	protected MBankAccount addBankAccount(MBank bank, String name, String accountNo, int currency_ID, String accountType, String trxName) {
 		MBankAccount bankAccount = new MBankAccount(m_ctx, 0, trxName);
 		bankAccount.setC_Bank_ID(bank.getC_Bank_ID());
 		bankAccount.setAccountNo(accountNo);
 		bankAccount.setC_Currency_ID(currency_ID);
 		bankAccount.setBankAccountType(accountType);
+		bankAccount.setName(name);
 		bankAccount.saveEx();
 		return bankAccount;
 	}
 
-	protected void addBankAccountDoc(MBankAccount bankAccount, String name, String paymentRule, String trxName) {
+	protected void addBankAccountDoc(MBankAccount bankAccount, String name, String paymentRule, int currentNext, String trxName) {
 		X_C_BankAccountDoc bankAccountDoc = new X_C_BankAccountDoc(m_ctx, 0, trxName);
 		bankAccountDoc.setC_BankAccount_ID(bankAccount.getC_BankAccount_ID());
 		bankAccountDoc.setName(name);
 		bankAccountDoc.setPaymentRule(paymentRule);
+		bankAccountDoc.setCurrentNext(currentNext);
 		bankAccountDoc.saveEx();
 	}
 } // MSetup
